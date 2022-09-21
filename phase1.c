@@ -30,10 +30,13 @@ typedef struct PCBEntry {
     int timeRanFor; 
     // Keep track of what zapped this process
     struct PCBEntry* zapList;
-    // 
+    // For proc table
     struct PCBEntry* parent;
     struct PCBEntry* firstChild;
     struct PCBEntry* nextChild;
+    // For pq structure
+    struct PCBEntry* nextPQ;
+
     char name[MAXNAME];
     USLOSS_Context context;
     Process func;
@@ -102,14 +105,78 @@ typedef struct PriorityQueue {
     PCBEntry* seven;
 } PriorityQueue;
 
-const PriorityQueue* priorityQueue;
+PriorityQueue priorityQueue;
 
-void pq_init(){
-    priorityQueue = (PriorityQueue* ) malloc(sizeof(PriorityQueue));
-}
 
+
+/* 
+    Adds to the priority queue
+*/
 void pq_add(int pid){
+    // Get process
+    int slot = pid % MAXPROC;
+    PCBEntry process = procTable[slot];
+    // Get priority
+    int priority = process.priority;
 
+    PCBEntry* head;
+    if (priority==1){
+        if (priorityQueue.one==NULL){
+            priorityQueue.one = &process;
+            return;
+        }
+        head = priorityQueue.one;
+    }
+
+   else if (priority==2){
+        if (priorityQueue.two==NULL){
+            priorityQueue.two = &process;
+            return;
+        }
+        head = priorityQueue.two;
+        
+
+    } else if (priority==3){
+        if (priorityQueue.three==NULL){
+            priorityQueue.three = &process;
+            return;
+        }
+        head = priorityQueue.three;
+
+    } else if (priority==4){
+        if (priorityQueue.four==NULL){
+            priorityQueue.four = &process;
+            return;
+        }
+        head = priorityQueue.four;
+
+    } else if (priority==5){
+        if (priorityQueue.five==NULL){
+            priorityQueue.five = &process;
+            return;
+        }
+        head = priorityQueue.five;
+
+    } else if (priority==6){
+        if (priorityQueue.six==NULL){
+            priorityQueue.six = &process;
+            return;
+        }
+        head = priorityQueue.six;
+
+    } else if (priority==7){
+        if (priorityQueue.seven==NULL){
+            priorityQueue.seven = &process;
+            return;
+        }
+        head = priorityQueue.seven;
+
+    }
+
+    while (head->nextPQ!=NULL){
+        head = head->nextPQ;
+    }
+    head->nextPQ = &process;
 }
 
 void pq_remove(int pid){
@@ -122,6 +189,10 @@ void pq_pushToEnd(int pid){
 
 int pq_get(){
     return 0;
+}
+
+void pq_dump(){
+    
 }
 
 
@@ -158,6 +229,7 @@ void process_init_func(){
     strcpy(sentinel.name,"sentinel");
     sentinel.func = sentinel_init_func;
     procTable[2 % MAXPROC] = sentinel;   
+    pq_add(sentinel.pid);
      
     // Create testcase main process
     PCBEntry main;
@@ -170,6 +242,7 @@ void process_init_func(){
     strcpy(main.name,"main");
     main.func = testcase_main;
     procTable[3 % MAXPROC] = main;   
+    pq_add(main.pid);
     // Call functions
     phase2_start_service_processes();
 	phase3_start_service_processes();
@@ -201,12 +274,13 @@ void  phase1_init(void){
     strcpy(init.name,"init");
     init.func = process_init_func;
     procTable[1 % MAXPROC] = init;   
+    pq_add(init.pid);
 
     return ;
 }
 
 int   fork1(char *name, int(*func)(char *), char *arg, int stacksize, int priority){
-    dumpProcesses();
+        
         return 0;
 }
 
