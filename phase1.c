@@ -109,6 +109,7 @@ PriorityQueue priorityQueue;
 
 
 
+
 /* 
     Adds to the priority queue
 */
@@ -118,7 +119,6 @@ void pq_add(int pid){
     PCBEntry process = procTable[slot];
     // Get priority
     int priority = process.priority;
-
     PCBEntry* head;
     if (priority==1){
         if (priorityQueue.one==NULL){
@@ -191,8 +191,35 @@ int pq_get(){
     return 0;
 }
 
+
+/*
+    Prints out the priority queue
+*/
 void pq_dump(){
     
+    printf("--------ONE----------------");
+    PCBEntry* head = priorityQueue.one;
+
+    int length = 0;
+
+    while (head!=NULL){
+        head = head->nextPQ;
+        length++;
+    }
+    
+    
+    // printf("--------TWO----------------");
+    // _pq_dump_list(priorityQueue.two);
+    // printf("--------THREE----------------");
+    // _pq_dump_list(priorityQueue.three);
+    // printf("--------FOUR----------------");
+    // _pq_dump_list(priorityQueue.four);
+    // printf("--------FIVE----------------");
+    // _pq_dump_list(priorityQueue.five);
+    // printf("--------SIX----------------");
+    // _pq_dump_list(priorityQueue.six);
+    // printf("--------SEVEN----------------");
+    // _pq_dump_list(priorityQueue.seven);
 }
 
 
@@ -226,6 +253,7 @@ void process_init_func(){
     sentinel.parent = NULL;
     sentinel.firstChild = NULL;
     sentinel.nextChild = NULL;
+    sentinel.nextPQ=NULL;
     strcpy(sentinel.name,"sentinel");
     sentinel.func = sentinel_init_func;
     procTable[2 % MAXPROC] = sentinel;   
@@ -239,6 +267,7 @@ void process_init_func(){
     main.parent = NULL;
     main.firstChild = NULL;
     main.nextChild = NULL;
+    main.nextPQ = NULL;
     strcpy(main.name,"main");
     main.func = testcase_main;
     procTable[3 % MAXPROC] = main;   
@@ -271,6 +300,7 @@ void  phase1_init(void){
     init.parent = NULL;
     init.firstChild = NULL;
     init.nextChild = NULL;
+    init.nextPQ=NULL;
     strcpy(init.name,"init");
     init.func = process_init_func;
     procTable[1 % MAXPROC] = init;   
@@ -280,9 +310,11 @@ void  phase1_init(void){
 }
 
 int   fork1(char *name, int(*func)(char *), char *arg, int stacksize, int priority){
-        
+        dumpProcesses();
+        pq_dump();
         return 0;
 }
+
 
 int   join(int *status){
     return 0;
@@ -307,35 +339,39 @@ int   getpid(void){
 /* 
     Prints out the entire proc table
 */  
-void  dumpProcesses(void){
-    printf("---------------------------\n");
-    for (int i=0;MAXPROC>i;i++){
-        printf("---------------------------\n");
-        if (procTable[i].pid == -1){
+void printProcess(PCBEntry process){
+    if (process.pid == -1){
             printf("NULL");
         } else {
-            printf("Name:          |%s\n",procTable[i].name);
-            printf("PID:           |%d\n",procTable[i].pid);
+            printf("Name:          |%s\n",process.name);
+            printf("PID:           |%d\n",process.pid);
             // Parent pid
             int parentPid = -1;
-            if (procTable[i].parent != NULL){
-                parentPid = procTable[i].parent->pid;
+            if (process.parent != NULL){
+                parentPid = process.parent->pid;
             }
             printf("Parent PID:    |%d\n",parentPid);
             // Priority
-            printf("Priority:      |%d\n",procTable[i].priority);
-            printf("status:        |%d\n",procTable[i].status);
+            printf("Priority:      |%d\n",process.priority);
+            printf("status:        |%d\n",process.status);
             // # of children
             int childrenNum = 0;
-            PCBEntry* curr = procTable[i].firstChild;
+            PCBEntry* curr = process.firstChild;
             while (curr!=NULL){
                 curr = curr->nextChild;
                 childrenNum++;
             }
             printf("# of children: |%d\n",childrenNum);
             // Time consumed
-            printf("Time consumed: |%d\n",procTable[i].timeRanFor);
+            printf("Time consumed: |%d\n",process.timeRanFor);
         }
+}
+
+void  dumpProcesses(void){
+    printf("---------------------------\n");
+    for (int i=0;MAXPROC>i;i++){
+        printf("---------------------------\n");
+        printProcess(procTable[i]);
         printf("\n---------------------------");
         
     }
