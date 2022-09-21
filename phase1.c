@@ -1,51 +1,22 @@
-/* 
-    - Every function needs to disable and renable interrupts when it starts and end
-        -See the USLOSS documentation to see how to read and edit the PSR to
-         disable and restore interrupts
-        - Therefore, when you disable interrupts at the top of your function, save the
-            old PSR state, and make a point of restoring the PSR to exactly its previous
-            value before you return.
-
-
-
-    - Therefore, your code must check, at the top of each of the required functions
-        - print an error message and call USLOSS_Halt(1).
-
-
-
-    -  context switch
-        If the dispatcher performs a context switch, it must call mmu_switch(new_pid)
-        to notify the MMU that it needs to switch page tables. Note that you must do
-        this anytime that you call USLOSS_ContextSwitch() - even if you don’t have
-        an old context (such as during startProcesses()).
-
-    getAviablePid(){
-        while (proccesTable[slot]!=NILL){
-            curPid++;
-        }
-        return curPid
-    }
-*/
-
 #include <phase1.h>
 #include <usloss.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
-//
-#define RUNNING 0                                                   /* max of one process can have this status */
-#define READY   1                                                   /* starting status of processes */
-#define BLOCKED 2                                                   /* status of blocked process */
-#define ZAPPED  3                                                   /* status of zapped process, not yet quit */
-#define QUIT    4
-#define FINISHED 5
-// 10 > BLOCKED 
-#define UNUSED -1
-//
+/* 
+    -----------------------------
+    |     STATUSES              |
+    -----------------------------
+*/
+#define READY 1;
+#define RUNNING 2;
 
 /* 
-    Types
-*/
+    -----------------------------
+    |     Procces   Type         |
+    -----------------------------
+*/ 
 typedef void (*Process)();
 
 typedef struct PCBEntry {
@@ -53,254 +24,289 @@ typedef struct PCBEntry {
     int priority;
     int status; 
     int isZapped;
+    // Keep track of when the shit started 
     int timeSliceStart;
+    // Keep track of how long it ran for
+    int timeRanFor; 
+    // Keep track of what zapped this process
+    struct PCBEntry* zapList;
+    // 
     struct PCBEntry* parent;
     struct PCBEntry* firstChild;
     struct PCBEntry* nextChild;
-    char procName[MAXNAME];
+    char name[MAXNAME];
     USLOSS_Context context;
     Process func;
+    // Args 
+    char* args;
 
 } PCBEntry;
 
-/* 
-    Fields
-*/
-struct PCBEntry procTable[MAXPROC];
-
-int curPID = 1;
+// Current process running
 PCBEntry currentProccess;
 
 
+/* 
+    -----------------------------
+    |    Proccess Table          |
+    -----------------------------
+*/  
+
+// Proccess Table
+PCBEntry procTable[MAXPROC];
+
+// Keeps track of pid to assign next
+int curPID = 4;
+
+
 
 /* 
-    Setup
+    Finds a new pid number that is aviable due to the fact that the slot
+    is open in the proc table
 */
-void crearteInitProcces(){
-    //  createSentinelProc()
+int getNewPID(){
+    printf("here\n");
+    // int slot = curPID % MAXPROC; 
+    // int size = 0;
+    // while (procTable[slot] == NULL){
 
-    // createMainProc()
+    //     curPID++;
+    //     slot = curPID % MAXPROC; 
+    //     // Ensures that while loop exits if all pids 
+    //     // in table are full
+    //     size++;
+    //     if (size > MAXPROC*2){
+    //         printf("Error: PID are all full");
+    //         exit(1);
+    //     }
+    // }
 
-    // While 1: 
-    //   int val = join(0);
-    //   if val == -2:
-    //        errorr message & halt
-     
-    
+    return curPID;
 }
 
-// void sentinelProc(){
-//         while (1) {
-//                 if (phase2_check_io() == 0){
-//                 //      report deadlock and terminate simulation
-//                 }
-//                 USLOSS_WaitInt();
-// }
-// }
 
-
-void createSentinelProc(){
-    return;
-}
-
-void createMainProc(){
-    return;
-}
-
-/* 
-    Creates sentinal and main process
-*/
-void initProccess(){
-    PCBEntry mainProc;
-    // Set fields
-    curPID++;
-    mainProc.pid = curPID;
-    mainProc.priority = 6;
-    mainProc.parent = NULL;
-    mainProc.firstChild = NULL;
-    mainProc.nextChild = NULL;
-    strcpy( mainProc.procName, "main");
-    mainProc.func = crearteInitProcces;
-    
-
-
-
-
-
-    return;
-}
 
 
 /* 
-    Creates the first process in the proc table
-*/
-void  phase1_init(void){
-    PCBEntry initProc;
-    curPID = 1;
-    // Set fields
-    initProc.pid = 1;
-    initProc.priority = 6;
-    initProc.parent = NULL;
-    initProc.firstChild = NULL;
-    initProc.nextChild = NULL;
-    strcpy( initProc.procName, "init");
-    initProc.func = crearteInitProcces;
-    // Add to proc table
-    procTable[1 % MAXPROC] = initProccess;
-    // set to current process 
-    currentProccess = initProc;
-    // Call dispatcher
-    dispatcher();
-};
+    -----------------------------
+    |     Priority Queue         |
+    -----------------------------
+*/  
+typedef struct PriorityQueue {
+    PCBEntry* one;
+    PCBEntry* two;
+    PCBEntry* three;
+    PCBEntry* four;
+    PCBEntry* five;
+    PCBEntry* six;
+    PCBEntry* seven;
+} PriorityQueue;
 
-void dispatcher(){
-    //    timeSliceStart This value should be stored when
-    // the dispatcher switches to a process
-    return;
+const PriorityQueue* priorityQueue;
+
+void pq_init(){
+    priorityQueue = (PriorityQueue* ) malloc(sizeof(PriorityQueue));
 }
 
-int  fork1(char *name, int(*func)(char *), char *arg, int stacksize, int priority){
-    // Create the entry in the table
-            //     Almost at the end of fork1() - after you’ve fully initialized the process entry
-            // for the child - you must call mmu_init_proc(pid)
-    // set status to ready
-    // call the function
-    // make the memory
-    // discaphter
-	return 0;
-};
+void pq_add(int pid){
 
-/* 
-    Runnable, suspdened, dead
-*/ 
-int  join(int *status){
-    // Check if process has children
-    // Finds highest priority child to run 
-    // Then blocks the current process
-    // calls distapcher which run the child 
+}
 
-    // ?? delete child when done in  process table
+void pq_remove(int pid){
 
+}
 
-    // *status -> status 
-    return 0; // pid of dead child
-};
+void pq_pushToEnd(int pid){
 
+}
 
-/* 
-    Any time that a process is terminated with quit(), you must call mmu_quit(pid)
-    to inform the MMU that it can free the page table for that process.7
-*/
-void quit(int status){
-    // Change current procces to not be runnable
-
-    // If the parent’s process is already waiting in a join()
-       // child->parent->status == BLOCKED
-
-    // If the parent’s process is not yet waiting in a join()
-        // set proccess status to == QUIT
-
-    //     If, when this process dies, one or more processes are blocked trying to zap()
-    // this process, all of them will be awoken immediately
-
-    return;
-};
-
-// never un blocks a processs
-int   zap(int pid){
-    // Error handling
-        // if the caller attempts to zap itself, or to zap a non-existent process (including
-            // if pid == curPid 
-            // error message
-            // USLOSS_Halt(1)
-
-        // If  a process that is still in the process table but has terminated, zap() will print
-        // an error message and call USLOSS_Halt(1). 
-                // if procTable[pid]-> status == FINISHED 
-                // error message
-                // USLOSS_Halt(1)
-
-        // If called on pid 1
-                // error message
-                // USLOSS_Halt(1)
-
-    
-    // Block the process at the pid
-            
-
-
-    
+int pq_get(){
     return 0;
-};
+}
+
+
+
+
+
+/* 
+    -----------------------------
+    |     CORE FUNCTIONS        |
+    -----------------------------
+*/  
+
+void sentinel_init_func(){
+     while (1) {
+        if (phase2_check_io() == 0){
+            // report deadlock and terminate simulation
+        }
+        USLOSS_WaitInt();
+     }
+
+}
+
+
+
+void process_init_func(){
+    // Create sentinel process
+    PCBEntry sentinel;
+    sentinel.pid = 2;
+    sentinel.priority = 7;
+    sentinel.status = READY;
+    sentinel.parent = NULL;
+    sentinel.firstChild = NULL;
+    sentinel.nextChild = NULL;
+    strcpy(sentinel.name,"sentinel");
+    sentinel.func = sentinel_init_func;
+    procTable[2 % MAXPROC] = sentinel;   
+     
+    // Create testcase main process
+    PCBEntry main;
+    main.pid = 3;
+    main.priority = 5;
+    main.status = READY;
+    main.parent = NULL;
+    main.firstChild = NULL;
+    main.nextChild = NULL;
+    strcpy(main.name,"main");
+    main.func = testcase_main;
+    procTable[3 % MAXPROC] = main;   
+    // Call functions
+    phase2_start_service_processes();
+	phase3_start_service_processes();
+	phase4_start_service_processes();
+	phase5_start_service_processes();
+	testcase_main();
+    // 
+    while (1){
+                join(0);
+    }
+}
+
+
+void  phase1_init(void){
+    // Set everything in the proc table to NULL
+    for (int i=0; MAXPROC>i;i++){
+        PCBEntry dummy;
+        dummy.pid = -1;
+        procTable[i] =dummy ;
+    }
+    struct PCBEntry init;
+
+    init.pid =1;
+    init.priority = 1;
+    init.status = READY;
+    init.parent = NULL;
+    init.firstChild = NULL;
+    init.nextChild = NULL;
+    strcpy(init.name,"init");
+    init.func = process_init_func;
+    procTable[1 % MAXPROC] = init;   
+
+    return ;
+}
+
+int   fork1(char *name, int(*func)(char *), char *arg, int stacksize, int priority){
+    dumpProcesses();
+        return 0;
+}
+
+int   join(int *status){
+    return 0;
+}
+
+void  quit(int status){
+    return ;
+}
+
+int  zap(int pid){
+    return 0;
+}
 
 int   isZapped(void){
-    // currProcces->isZapped
     return 0;
-};
+}
 
 int   getpid(void){
-    // curProcces->pid
     return 0;
-};
+}
 
+/* 
+    Prints out the entire proc table
+*/  
 void  dumpProcesses(void){
-    // Prints out the entire proc table with all the fields 
-    return;
-};
+    printf("---------------------------\n");
+    for (int i=0;MAXPROC>i;i++){
+        printf("---------------------------\n");
+        if (procTable[i].pid == -1){
+            printf("NULL");
+        } else {
+            printf("Name:          |%s\n",procTable[i].name);
+            printf("PID:           |%d\n",procTable[i].pid);
+            // Parent pid
+            int parentPid = -1;
+            if (procTable[i].parent != NULL){
+                parentPid = procTable[i].parent->pid;
+            }
+            printf("Parent PID:    |%d\n",parentPid);
+            // Priority
+            printf("Priority:      |%d\n",procTable[i].priority);
+            printf("status:        |%d\n",procTable[i].status);
+            // # of children
+            int childrenNum = 0;
+            PCBEntry* curr = procTable[i].firstChild;
+            while (curr!=NULL){
+                curr = curr->nextChild;
+                childrenNum++;
+            }
+            printf("# of children: |%d\n",childrenNum);
+            // Time consumed
+            printf("Time consumed: |%d\n",procTable[i].timeRanFor);
+        }
+        printf("\n---------------------------");
+        
+    }
+    printf("\n");
+}
 
 int   blockMe(int block_status){
-    // if block_status < 10: 
-        // error message
-        // halt
-
-    // currProcess->status  = block_status;
-
-    // call dispatcher
-    // dispatcher();
     return 0;
-};
+}
 
 int   unblockProc(int pid){
-    //  If the indicated process was not blocked, does not exist, or is blocked
-    // on a status ≤ 10.
-        // return -2;
-
-    // if proces is trying to block itself 
-        // return -2 
-
-
-    // change the status of the proccess at the pid to READY
-    // Place the process at the end of the run queue at is priority
-
-    // dispatcher()
     return 0;
-};
+}
 
 int   readCurStartTime(void){
-    // currentProcces->timeSliceStart
     return 0;
-};
+}
 
 void  timeSlice(void){
-    //  if  80 < readtime():
-        // dispatcher();
-    return;
-};
+    return ;
+}
 
-// returns the total time (in microseconds)
 int   readtime(void){
-
-    /// return currentTime() -  currentProccess->timeSliceStart
     return 0;
-};
+}
 
 int   currentTime(void){
-    // return from this function USLOSS_DeviceInput(USLOSS_CLOCK_DEV, ...)
     return 0;
-};
+}
 
 void  startProcesses(void){
-    // calls the init process which makes all the data structures
-    // dispacther();
-    // 
-};
+    /* 
+        Intialze init process and its children
+    */
+    phase1_init();
+   
+    
+
+
+    /* 
+        Call the init process
+    */
+    procTable[1].func();
+    
+}
+
+
+
