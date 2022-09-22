@@ -95,88 +95,45 @@ int getNewPID(){
     |     Priority Queue         |
     -----------------------------
 */  
-typedef struct PriorityQueue {
-    PCBEntry* one;
-    PCBEntry* two;
-    PCBEntry* three;
-    PCBEntry* four;
-    PCBEntry* five;
-    PCBEntry* six;
-    PCBEntry* seven;
-} PriorityQueue;
 
-PriorityQueue priorityQueue;
-
-
+PCBEntry  priorityQueue[6];
+int PQ_SIZE = 7;
 
 
 /* 
+    Intilaize
+*/
+void pq_init(){
+   for (int i=0; PQ_SIZE>i;i++){
+        PCBEntry dummy;
+        dummy.pid = -1;
+        priorityQueue[i] = dummy ;
+    }
+}
+
+/* 
+    - first add the process procTable
+
     Adds to the priority queue
 */
 void pq_add(int pid){
-    // Get process
+    //  Get process 
     int slot = pid % MAXPROC;
     PCBEntry process = procTable[slot];
     // Get priority
     int priority = process.priority;
-    PCBEntry* head;
-    if (priority==1){
-        if (priorityQueue.one==NULL){
-            priorityQueue.one = &process;
-            return;
+    int index = priority -1;
+
+    if (priorityQueue[index].pid==-1){
+        priorityQueue[index] = process;
+    } else {
+        PCBEntry head = priorityQueue[index];
+        while (head.nextPQ!=NULL){
+            head = *head.nextPQ;
         }
-        head = priorityQueue.one;
+        head.nextPQ = &process;
     }
-
-   else if (priority==2){
-        if (priorityQueue.two==NULL){
-            priorityQueue.two = &process;
-            return;
-        }
-        head = priorityQueue.two;
-        
-
-    } else if (priority==3){
-        if (priorityQueue.three==NULL){
-            priorityQueue.three = &process;
-            return;
-        }
-        head = priorityQueue.three;
-
-    } else if (priority==4){
-        if (priorityQueue.four==NULL){
-            priorityQueue.four = &process;
-            return;
-        }
-        head = priorityQueue.four;
-
-    } else if (priority==5){
-        if (priorityQueue.five==NULL){
-            priorityQueue.five = &process;
-            return;
-        }
-        head = priorityQueue.five;
-
-    } else if (priority==6){
-        if (priorityQueue.six==NULL){
-            priorityQueue.six = &process;
-            return;
-        }
-        head = priorityQueue.six;
-
-    } else if (priority==7){
-        if (priorityQueue.seven==NULL){
-            priorityQueue.seven = &process;
-            return;
-        }
-        head = priorityQueue.seven;
-
-    }
-
-    while (head->nextPQ!=NULL){
-        head = head->nextPQ;
-    }
-    head->nextPQ = &process;
+ 
 }
 
 void pq_remove(int pid){
@@ -195,31 +152,25 @@ int pq_get(){
 /*
     Prints out the priority queue
 */
+
+
 void pq_dump(){
     
-    printf("--------ONE----------------");
-    PCBEntry* head = priorityQueue.one;
-
-    int length = 0;
-
-    while (head!=NULL){
-        head = head->nextPQ;
-        length++;
+    for (int i=0; PQ_SIZE>i;i++){
+        PCBEntry process = priorityQueue[i];
+        printf("------------ %d ------------\n",i+1);
+        if (process.pid==-1){
+            printf("null\n");
+        } else {
+            while (process.nextPQ != NULL){
+                printf("name:%s\n",process.name);
+                process = *process.nextPQ;
+            }
+            printf("name:%s\n",process.name);
+        }
+        printf("--------------------------\n",i);
     }
-    
-    
-    // printf("--------TWO----------------");
-    // _pq_dump_list(priorityQueue.two);
-    // printf("--------THREE----------------");
-    // _pq_dump_list(priorityQueue.three);
-    // printf("--------FOUR----------------");
-    // _pq_dump_list(priorityQueue.four);
-    // printf("--------FIVE----------------");
-    // _pq_dump_list(priorityQueue.five);
-    // printf("--------SIX----------------");
-    // _pq_dump_list(priorityQueue.six);
-    // printf("--------SEVEN----------------");
-    // _pq_dump_list(priorityQueue.seven);
+  
 }
 
 
@@ -270,8 +221,9 @@ void process_init_func(){
     main.nextPQ = NULL;
     strcpy(main.name,"main");
     main.func = testcase_main;
-    procTable[3 % MAXPROC] = main;   
+    procTable[3 % MAXPROC] = main;  
     pq_add(main.pid);
+  
     // Call functions
     phase2_start_service_processes();
 	phase3_start_service_processes();
@@ -280,7 +232,7 @@ void process_init_func(){
 	testcase_main();
     // 
     while (1){
-                join(0);
+        join(0);
     }
 }
 
@@ -292,6 +244,9 @@ void  phase1_init(void){
         dummy.pid = -1;
         procTable[i] =dummy ;
     }
+    // Init the pq
+    pq_init();
+
     struct PCBEntry init;
 
     init.pid =1;
@@ -300,17 +255,16 @@ void  phase1_init(void){
     init.parent = NULL;
     init.firstChild = NULL;
     init.nextChild = NULL;
-    init.nextPQ=NULL;
+    init.nextPQ = NULL;
     strcpy(init.name,"init");
     init.func = process_init_func;
     procTable[1 % MAXPROC] = init;   
     pq_add(init.pid);
 
-    return ;
 }
 
 int   fork1(char *name, int(*func)(char *), char *arg, int stacksize, int priority){
-        dumpProcesses();
+        // dumpProcesses();
         pq_dump();
         return 0;
 }
