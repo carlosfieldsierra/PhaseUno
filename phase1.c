@@ -46,7 +46,34 @@ typedef struct PCBEntry {
 } PCBEntry;
 
 // Current process running
-PCBEntry currentProccess;
+PCBEntry* currentProccess;
+
+
+void proc_init(){
+    
+}
+
+/* 
+    Add the child to the parent
+*/
+void proc_add(PCBEntry parent,PCBEntry child){
+    // One sec bro I'm gonna save the code on github
+}
+
+/*  
+    find lowest priority child
+*/
+void proc_find(PCBEntry parent){
+    
+}
+
+/* 
+    Print out parent and all it's children
+*/
+void proc_dump(PCBEntry* parent){
+    
+}
+
 
 
 /* 
@@ -209,6 +236,7 @@ void process_init_func(){
     sentinel.func = sentinel_init_func;
     procTable[2 % MAXPROC] = sentinel;   
     pq_add(sentinel.pid);
+
      
     // Create testcase main process
     PCBEntry main;
@@ -223,6 +251,8 @@ void process_init_func(){
     main.func = testcase_main;
     procTable[3 % MAXPROC] = main;  
     pq_add(main.pid);
+    
+
   
     // Call functions
     phase2_start_service_processes();
@@ -246,6 +276,7 @@ void  phase1_init(void){
     }
     // Init the pq
     pq_init();
+    
 
     struct PCBEntry init;
 
@@ -261,11 +292,13 @@ void  phase1_init(void){
     procTable[1 % MAXPROC] = init;   
     pq_add(init.pid);
 
+
+
+    
+
 }
 
 int   fork1(char *name, int(*func)(char *), char *arg, int stacksize, int priority){
-        // dumpProcesses();
-        pq_dump();
         return 0;
 }
 
