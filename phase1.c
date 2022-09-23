@@ -9,8 +9,8 @@
     |     STATUSES              |
     -----------------------------
 */
-#define READY 1;
-#define RUNNING 2;
+#define READY 1
+#define RUNNING 2
 
 unsigned int PSR;
 /* 
@@ -79,8 +79,23 @@ void proc_add(PCBEntry* parent,PCBEntry* child){
 /*  
     find lowest priority child
 */
-void proc_find(PCBEntry* parent){
-    
+int proc_find(PCBEntry* parent){
+    PCBEntry* firstChild = parent->firstChild;
+    PCBEntry* lowestChild = firstChild;
+
+    while (firstChild!=NULL){
+        if (firstChild->status == 1){
+            if (firstChild->priority < lowestChild->priority){
+                lowestChild = firstChild;
+            }
+            firstChild = firstChild->nextChild;
+        }
+    }
+
+    if (lowestChild==NULL){
+        return -1;
+    }
+    return lowestChild->pid;
 }
 
 /* 
@@ -178,8 +193,25 @@ void pq_pushToEnd(int pid){
 
 }
 
+/* 
+    Get the highest priority element in the queue
+*/
 int pq_get(){
-    return 0;
+    
+    for (int i=0; PQ_SIZE>i;i++){
+        if (priorityQueue[i]!=NULL){
+                PCBEntry* head = priorityQueue[i];
+                while (head!=NULL){
+                    if (head->status == READY){
+                        return head->pid;
+                    }
+                    head = head->nextPQ;
+                }
+        }
+    }
+
+
+    return -1;
 }
 
 
@@ -205,6 +237,22 @@ void pq_dump(){
 
 
 
+/* 
+    -----------------------------
+    |      DISPATCHER            |
+    -----------------------------
+*/  
+void dispatcher(){
+    /* 
+        Get highest priority pq
+    */
+    int pid = pq_get();
+    
+    /*  
+        Call the function
+    */
+    // procTable[pid]->func(procTable[pid]->args);
+}
 
 
 /* 
@@ -330,9 +378,10 @@ int  fork1(char *name, int(*func)(char *), char *arg, int stacksize, int priorit
     pq_add(newProcess->pid);
     // Add as child
     proc_add(currentProcess->proccess,newProcess);
-
     
     
+    // Call dispatcher
+    dispatcher();
     return 0;
 }
 
@@ -353,8 +402,11 @@ int   isZapped(void){
     return 0;
 }
 
+/* 
+    Gets pid of current running process
+*/
 int   getpid(void){
-    return 0;
+    return currentProcess->proccess->pid;
 }
 
  
