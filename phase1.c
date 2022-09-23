@@ -11,6 +11,7 @@
 */
 #define READY 1
 #define RUNNING 2
+#define BLOCKED 10
 
 unsigned int PSR;
 /* 
@@ -84,7 +85,7 @@ int proc_find(PCBEntry* parent){
     PCBEntry* lowestChild = firstChild;
 
     while (firstChild!=NULL){
-        if (firstChild->status == 1){
+        if (firstChild->status == READY){
             if (firstChild->priority < lowestChild->priority){
                 lowestChild = firstChild;
             }
@@ -185,12 +186,44 @@ void pq_add(int pid){
  
 }
 
+/* 
+    Removes element from the priority queue
+*/
 void pq_remove(int pid){
-
+    // Get the process & priority
+    int slot = pid % MAXPROC;
+    if (procTable[slot]==NULL){
+        return;
+    }
+    PCBEntry* process = procTable[slot];
+    int priority = process->priority;
+     int index = priority -1;
+    // Get the head of the pq 
+    PCBEntry* head = priorityQueue[index];
+    if (head->pid==pid){ 
+        priorityQueue[index] = head->nextPQ;
+        head->nextPQ=NULL;
+    } else {
+        PCBEntry* prev = head;
+        while (head!=NULL){
+            
+            if (head->pid ==pid){
+                prev->nextPQ = head->nextPQ;
+                head->nextPQ=NULL;
+            }
+            prev = head;
+            head = head->nextPQ;
+        }
+    }
 }
 
+/* 
+    Pushs an element in the pq to end of 
+    the linked list 
+*/
 void pq_pushToEnd(int pid){
-
+    pq_remove(pid);
+    pq_add(pid);
 }
 
 /* 
@@ -336,7 +369,7 @@ void process_init_func(){
     
 
 
-
+// 
 void  phase1_init(void){
     
     // Make init process
@@ -378,8 +411,7 @@ int  fork1(char *name, int(*func)(char *), char *arg, int stacksize, int priorit
     pq_add(newProcess->pid);
     // Add as child
     proc_add(currentProcess->proccess,newProcess);
-    
-    
+
     // Call dispatcher
     dispatcher();
     return 0;
@@ -398,8 +430,13 @@ int  zap(int pid){
     return 0;
 }
 
+/* 
+    Tells wether it is zapped or not,
+    1 - it is
+    0 - it is not
+*/
 int   isZapped(void){
-    return 0;
+    return currentProcess->proccess->isZapped;
 }
 
 /* 
@@ -452,16 +489,53 @@ void  dumpProcesses(void){
     printf("\n");
 }
 
+/* 
+    Block the current process
+*/
 int   blockMe(int block_status){
+    if (block_status < 10){
+        printf("Block status must be above yes is %d\n",block_status);
+        USLOSS_Halt(1);
+    }
+    // Set to block
+    currentProcess->proccess->status = block_status;
+    // Call dispacther
+    dispatcher();
     return 0;
 }
 
+/* 
+    UnBlocks a process 
+*/
 int   unblockProc(int pid){
+    int slot = pid % MAXPROC;
+    // Cant un block null
+    if (procTable[slot]==NULL){
+        return -2;
+    }
+    PCBEntry* proccess = procTable[slot];
+    // Cant un block youself
+    if (proccess->pid==pid){
+        return -2;
+    }
+    int status = proccess->status;
+    // Can't un block an unblocked process
+    if (status<BLOCKED){
+        return -2;
+    }
+
+    // Change status to ready
+    proccess->status = READY;
+    // Push to the end of the pq
+    pq_pushToEnd(proccess->pid);
+
+    // Call dispacther
+    dispatcher();
     return 0;
 }
 
 int   readCurStartTime(void){
-    return 0;
+    return currentProcess->proccess->timeSliceStart;
 }
 
 void  timeSlice(void){
