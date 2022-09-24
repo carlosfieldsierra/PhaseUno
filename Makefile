@@ -23,7 +23,7 @@ VPATH = testcases
 
 
 
-TESTS = test00
+TESTS = test00 test01
 
 
 all: ${TESTS}

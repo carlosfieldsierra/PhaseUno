@@ -1,8 +1,137 @@
+"HELP WITH INTERRUPTS: 
+I've decided to just give the code for the interrupt handler to you all.  
+To make use of this function, you must install it into the IntVec array provided by USLOSS, and you must be running a process with interrupts enabled.
+"
+-- EXTRA INFO -- 
+INIT 
+    while: join(0) after bootstrap
+    will do so till join returns -2,
+    -2 means that it has no children left
 
+SENTINAL
+    - need to report deadlock and terminate simulation
+
+TESTCASE_MAIN:
+    - if testcase_main() function ever returns then 
+      you must call USLOSS_Halt() with the return value
+      of testcase_main &&
+     - if return value is non zero print an error message
+
+DISBALE INTERUPTS
+    - every function in the assigment needs
+    to disable innterupts
+    - restore intertupts not disable
+
+Context_Switching
+    - set up  context : USLOSS_ContextInit()
+    - siwtch context: USLOSS_ContentSwitch()
+            - must call mmu_switch(new_pid) to
+    - dont save at quit() & startProcesses()
+
+
+TRAMPOLINE FUNCTION
+    - "This means that the function that you passed to ContextInit() eventually returned
+        remember, we talked (Monday?) about using a "trampoline" function to run the callers startFunc
+        or wait...
+        is that the standard init function from USLOSS?  Let me check"
+
+TIME 
+    -
+
+MMU
+    - call at end of fork1() after you make the process 
+    - when you call quit call mmu_quit(pid)
+    - when you call a context switch you must call  
+      mmu_switch(new_pid)
+
+
+
+
+
+
+
+
+
+-- FUNCTIONS -- 
 
 phase1_init()
-    - 
-
+    - called before startProcesses
+    - to intalize your data structures
+    - calls fork1 twice to create two 
+      basic process sentinal, and testcase_main
+    
 
 startProcesses()
-    - called once all the
+    - called after phase1_init()
+
+fork1()
+    - check that stack size is above USLOSS_MIN_STACK
+    - check that priority is between 1-5
+
+    - created new process
+    - which is child of current process
+    - calls new function
+    - need to call malloc for stackSize ?? i think for USLOSS_ContextInit
+   
+
+
+join()
+    - blocks the current process
+    - runs its lowest priority child 
+    - once child dies delivers status back 
+      to parent
+    - if child dies delete it from proc table 
+      and pq
+    -  return -2 when current process has no children
+    - "orry, I thought I had that explicitly defined in the spec; looks like I overlooked that detail.  If a process calls quit() while it still has children (either alive, or dead but un-join()ed), you should print an error message and call USLOSS_Halt() to kill the simulation."
+
+
+quit()
+    - termintates the current process 
+    - changes the status of current process 
+    -  If parent is wating in a join
+        - awake parent
+    - context swicth while not saving the process 
+      context
+
+zap()
+    - ask another process to terminate 
+    - sets a flag to tell the process to quit soon
+      as possible
+    - if the process you zapped is blocked, it will QUIT
+      when it unblocks 
+    - can't zap init so pid 1
+
+isZapped()
+    - return if current  process has been zapped
+
+getpid()
+    - return current process pid
+
+dumpProcesses()
+    - print proc table
+
+blockMe()
+    - blocks current process
+
+unblockProc()
+    - move a process that is not the current 
+      process from blocked state to unblocked state\
+
+readCurStartTime()
+    - returns time in microseconds in which 
+      current process started
+
+currentTime()
+    - returns the current time 
+
+readtime()
+    - read the current wall-clock time
+
+timeSlice()
+    - checks to see if current running process execed
+     it's timeslice 
+
+
+
+    

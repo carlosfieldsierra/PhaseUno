@@ -1,0 +1,864 @@
+#include <phase1.h>
+#include <usloss.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+
+
+
+/* 
+    -----------------------------
+    |     STATUSES              |
+    -----------------------------
+*/
+#define READY 1
+#define RUNNING 2
+#define BLOCKED_ONE 2
+#define BLOCKED 10
+unsigned int PSR;
+/* 
+    -----------------------------
+    |     Procces   Type         |
+    -----------------------------
+*/ 
+typedef void (*Process)();
+
+typedef struct PCBEntry {
+    int pid;
+    int priority;
+    int status; 
+    int isZapped;
+    // Keep track of when the shit started 
+    int timeSliceStart;
+    // Keep track of how long it ran for
+    int timeRanFor; 
+    // Keep track of what zapped this process
+    struct PCBEntry* zapList;
+    // For proc table
+    struct PCBEntry* parent;
+    struct PCBEntry* firstChild;
+    struct PCBEntry* nextChild;
+    // For pq structure
+    struct PCBEntry* nextPQ;
+
+    char name[MAXNAME];
+    // Context info
+    USLOSS_Context context;
+    Process func;
+    // Args 
+    char* args;
+
+} PCBEntry;
+
+// Current process running
+typedef struct  CurrentProcess {
+    PCBEntry* proccess;
+} CurrentProcess;
+
+
+
+CurrentProcess* currentProcess;
+
+
+
+
+void proc_init(){
+    currentProcess = malloc(sizeof(CurrentProcess));
+}
+
+
+
+/* 
+    Add the child to the parent
+*/
+void proc_add(PCBEntry* parent,PCBEntry* child){
+    if (parent->firstChild==NULL){
+        parent->firstChild = child;
+        child->parent = parent;
+    } else {
+        PCBEntry* curr = parent->firstChild;
+        while (curr->nextChild!=NULL){
+            curr = curr->nextChild;
+        }
+        curr->nextChild = child;
+        child->parent = parent;
+    }
+}
+
+/*  
+    find lowest priority child
+*/
+int proc_find(PCBEntry* parent){
+    PCBEntry* firstChild = parent->firstChild;
+    PCBEntry* lowestChild = firstChild;
+
+    while (firstChild!=NULL){
+        if (firstChild->status == READY){
+            if (firstChild->priority < lowestChild->priority){
+                lowestChild = firstChild;
+            }
+            firstChild = firstChild->nextChild;
+        }
+    }
+
+    if (lowestChild==NULL){
+        return -1;
+    }
+    return lowestChild->pid;
+}
+
+/* 
+    Print out parent and all it's children
+*/
+void proc_dump(PCBEntry* parent){
+    printf("----- PROCESSS %s --------\n",parent->name);
+    PCBEntry* child = parent->firstChild;
+    while (child!=NULL){
+        printf("%s\n",child->name);
+        child = child->nextChild;
+    }
+
+
+}
+
+
+
+/* 
+    -----------------------------
+    |    Extra Functions          |
+    -----------------------------
+*/  
+unsigned int checkModeBefore(){
+    if ( (USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()) == 0 ) {
+      USLOSS_Console("Function called while in user mode, by process %d. Halting...\n", currentProcess->proccess->pid);
+      USLOSS_Halt(1);
+    }
+
+  
+   
+    unsigned int val = USLOSS_PsrGet();
+   
+    
+    USLOSS_PsrSet(val & (~2));   
+
+
+
+    return val;
+}
+
+void checkModeAfter(unsigned int val){
+    if ( (USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()) == 0 ) {
+      USLOSS_Console("Function called while in user mode, by process %d. Halting...\n", currentProcess->proccess->pid);
+      USLOSS_Halt(1);
+    }
+
+    USLOSS_PsrSet(val);
+}
+
+/* 
+    -----------------------------
+    |    Proccess Table          |
+    -----------------------------
+*/  
+
+// Proccess Table
+PCBEntry* procTable[MAXPROC];
+
+// Keeps track of pid to assign next
+int curPID = 4;
+
+
+
+
+/* 
+    Finds a new pid number that is aviable due to the fact that the slot
+    is open in the proc table
+*/
+int getPID(){
+    int count = 0;
+    int slot = curPID % MAXPROC;
+    while (procTable[slot]!=NULL){
+        slot = curPID % MAXPROC;
+        curPID++;
+        count += 1;
+        // Stops infinte while loop
+        if (count> MAXPROC*2){
+            return -1;
+        }
+    }
+    
+
+    return curPID;
+}
+
+
+
+
+/* 
+    -----------------------------
+    |     Priority Queue         |
+    -----------------------------
+*/  
+int PQ_SIZE = 7;
+PCBEntry*  priorityQueue[7];
+
+
+
+
+/* 
+    - first add the process procTable
+
+    Adds to the priority queue
+*/
+void pq_add(int pid){
+   
+    //  Get process 
+    int slot = pid % MAXPROC;
+    PCBEntry* process = procTable[slot];
+     
+    // Get priority
+    int priority = process->priority;
+    int index = priority -1;
+
+    if (priorityQueue[index]==NULL){
+        priorityQueue[index] = process;
+    } else {
+        PCBEntry* head = priorityQueue[index];
+        while (head->nextPQ!=NULL){
+            head = head->nextPQ;
+        }
+        head->nextPQ = process;
+    }
+ 
+}
+
+/* 
+    Removes element from the priority queue
+*/
+void pq_remove(int pid){
+    // Get the process & priority
+    int slot = pid % MAXPROC;
+    if (procTable[slot]==NULL){
+        return;
+    }
+    PCBEntry* process = procTable[slot];
+    int priority = process->priority;
+     int index = priority -1;
+    // Get the head of the pq 
+    PCBEntry* head = priorityQueue[index];
+    if (head->pid==pid){ 
+        priorityQueue[index] = head->nextPQ;
+        head->nextPQ=NULL;
+    } else {
+        PCBEntry* prev = head;
+        while (head!=NULL){
+            
+            if (head->pid ==pid){
+                prev->nextPQ = head->nextPQ;
+                head->nextPQ=NULL;
+            }
+            prev = head;
+            head = head->nextPQ;
+        }
+    }
+}
+
+/* 
+    Pushs an element in the pq to end of 
+    the linked list 
+*/
+void pq_pushToEnd(int pid){
+    pq_remove(pid);
+    pq_add(pid);
+}
+
+/* 
+    Get the highest priority element in the queue
+*/
+int pq_get(){
+    
+    for (int i=0; PQ_SIZE>i;i++){
+        if (priorityQueue[i]!=NULL){
+                PCBEntry* head = priorityQueue[i];
+                while (head!=NULL){
+                    if (head->status == READY){
+                        return head->pid;
+                    }
+                    head = head->nextPQ;
+                }
+        }
+    }
+
+
+    return -1;
+}
+
+
+/*
+    Prints out the priority queue
+*/
+void pq_dump(){
+    printf("\n\n------------- PQ -------------------\n\n");
+    for (int i=0; PQ_SIZE>i;i++){
+        PCBEntry* process = priorityQueue[i];
+        printf("------------ %d ------------\n",i+1);
+        if (process==NULL){
+            printf("null\n");
+        } else {
+            while (process!=NULL){
+                printf("name:%s\n",process->name);
+                process = process->nextPQ;
+            }
+        }
+    }
+    printf("\n\n------------- PQ -------------------\n\n");
+}
+
+static void clockHandler(int dev,void *arg)
+{
+   // call the dispatcher if the time slice has expired
+    timeSlice();
+    
+
+    phase2_clockHandler();
+}
+
+/* 
+    -----------------------------
+    |      DISPATCHER            |
+    -----------------------------
+*/  
+void dispatcher(){}
+void _dispatcher(){
+    // unsigned int psr =  checkModeBefore();
+    if ( (USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()) == 0 ) {
+      USLOSS_Console("Function called while in user mode, by process %d. Halting...\n", currentProcess->proccess->pid);
+      USLOSS_Halt(1);
+    }
+    
+    //  Enable interupts
+    unsigned int val = USLOSS_PsrGet();
+    USLOSS_PsrSet(val | 2);   
+
+
+    /* 
+        Get highest priority pq
+    */
+    int pid = pq_get();
+    int slot = pid % MAXPROC;
+    
+   
+
+
+    if (pid == -1 ){
+        USLOSS_Halt(1);
+    }
+
+    /*
+        Usloss switches
+    */
+    printf("%s == %s\n",currentProcess->proccess->name,procTable[slot]->name);
+    USLOSS_ContextSwitch(&currentProcess->proccess->context, &procTable[slot]->context);
+    printf("here\n");
+    mmu_switch(pid);
+    currentProcess->proccess =  procTable[slot];
+    /* 
+        Check times
+    */
+    // readCurStartTime();
+    // timeSlice();
+
+  
+    /*  
+        Call the function
+    */
+    if (strcmp(procTable[slot]->name,"main")){
+                
+            if (procTable[slot]==NULL) return ;
+            int retVal = testcase_main();
+            if (retVal!=0){
+                printf("Eroor testcase_main returned %d\n",retVal);
+            }
+            USLOSS_Halt(retVal);
+    }
+    else if (procTable[slot]->args == NULL){
+
+        procTable[slot]->func();
+    } else {
+        procTable[slot]->func(procTable[slot]->args);
+    }
+
+    USLOSS_PsrSet(val);
+
+    // checkModeAfter(psr);
+}
+
+
+/* 
+    -----------------------------
+    |     CORE FUNCTIONS        |
+    -----------------------------
+*/  
+
+void sentinel_init_func(){
+     while (1) {
+        if (phase2_check_io() == 0){
+            // report deadlock and terminate simulation
+        }
+        USLOSS_WaitInt();
+     }
+
+}
+
+
+
+
+/* 
+    Function that init process runs
+*/
+void process_init_func(){
+    // Add to pq
+    pq_add(currentProcess->proccess->pid);
+    
+
+    // Create sentinel process
+
+    //
+    char* sentinelStack =(char *) malloc(USLOSS_MIN_STACK*sizeof(char));
+
+    PCBEntry* sentinel = malloc(sizeof(PCBEntry));
+
+        
+    sentinel->pid = 2;
+    sentinel->priority = 7;
+    sentinel->status = READY;
+    sentinel->parent = NULL;
+    sentinel->firstChild = NULL;
+    sentinel->nextChild = NULL;
+    sentinel->nextPQ=NULL;
+    // USLOSS_ContextInit(&sentinel->context, sentinelStack,
+    //         USLOSS_MIN_STACK * sizeof(char), NULL, sentinel_init_func);
+
+    strcpy(sentinel->name,"sentinel");
+    sentinel->func = sentinel_init_func;
+    procTable[2 % MAXPROC] = sentinel;  
+    // Add to pq
+    pq_add(sentinel->pid);
+    // Add as child
+    proc_add(currentProcess->proccess,sentinel);
+
+    
+
+    // Create testcase main process
+    PCBEntry* main = malloc(sizeof(PCBEntry));
+    int size = USLOSS_MIN_STACK*sizeof(char);
+    char* mainStack = (char *) malloc(size);
+    main->pid = 3;
+    main->priority = 5;
+    main->status = READY;
+    main->parent = NULL;
+    main->firstChild = NULL;
+    main->nextChild = NULL;
+    main->nextPQ = NULL;
+    // USLOSS_ContextInit(&main->context, mainStack,
+    //     size, NULL, testcase_main);
+    
+    strcpy(main->name,"main");
+    main->func = testcase_main;
+    procTable[3 % MAXPROC] = main;   
+    // Add to pq
+    pq_add(main->pid);
+    // Add as child 
+    proc_add(currentProcess->proccess,main);
+   
+
+
+    // Call functions
+     
+    phase2_start_service_processes(); // <---- 
+	phase3_start_service_processes();
+	phase4_start_service_processes();
+	phase5_start_service_processes();
+    
+
+    testcase_main();
+    // 
+    while (1){
+        int value = join(0);
+        printf("here\n");
+        if (value==-2){
+            printf("Error: init join() returned -2\n");
+            USLOSS_Halt(1);
+        }
+        USLOSS_Halt(1);
+    }
+   
+}
+     
+    
+    
+
+    
+
+
+/* 
+    This will be called exactly once, when the simulation starts up. Initialize
+    your data structures,
+*/ 
+void  phase1_init(void){
+    // Check if user mode 
+    if ( (USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()) == 0 ) {
+      USLOSS_Console("Function called while in user mode, by process %d. Halting...\n", currentProcess->proccess->pid);
+      USLOSS_Halt(1);
+    }
+
+    // USLOSS_IntVec[USLOSS_CLOCK_INT] = clockHandler;
+   
+
+
+    
+
+    
+
+    
+    /* each process needs its own stack */
+    int size = USLOSS_MIN_STACK*sizeof(char);
+    char* initStack = (char *) malloc(size);;
+    
+    // Make init process
+    
+    PCBEntry* init = malloc(sizeof(PCBEntry));
+    init->pid = 1;
+    init->priority = 1;
+    init->status = READY;
+    init->parent = NULL;
+    init->firstChild = NULL;
+    init->nextChild = NULL;
+    init->nextPQ = NULL;
+    USLOSS_ContextInit(&init->context, initStack, 
+        size, NULL, process_init_func);
+    strcpy(init->name,"init");
+    init->func = process_init_func;
+    procTable[1 % MAXPROC] = init;   
+
+    // Intilaze current process 
+    proc_init();
+    currentProcess->proccess = init;
+    // printf("here\n");
+    // checkModeAfter(psr);
+    
+}
+
+/*
+
+ */
+int  fork1(char *name, int(*func)(char *), char *arg, int stacksize, int priority){
+    unsigned int psr =  checkModeBefore();
+    printf("fork1 called \n");
+    /* 
+        Error checking
+    */
+    if (stacksize< USLOSS_MIN_STACK){
+        return -2;
+    }
+    if (priority < 1 || priority > 5){
+        return -1;
+    }
+    if (func == NULL || name == NULL){
+        return -1;
+    }
+    // Check if name size is to long
+    int nameSize = 0;
+    while (name[nameSize]!='\0'){
+        nameSize++;
+    }
+    if (nameSize>MAXNAME){
+        return -1;
+    }
+
+    /* 
+        Create new process
+    */      
+    int pid = getPID();
+    if (pid==-1){ // Means no more slots avilable
+        return -1;
+    }
+
+    int size = stacksize*sizeof(char);
+    char* newProcessStack = (char *)malloc(size);
+    PCBEntry* newProcess = malloc(sizeof(PCBEntry));
+    newProcess->pid = pid;
+    newProcess->priority = priority;
+    newProcess->status = READY;
+    newProcess->parent = NULL;
+    newProcess->firstChild = NULL;
+    newProcess->nextChild = NULL;
+    newProcess->nextPQ = NULL;
+    // USLOSS_ContextInit(&newProcess->context, newProcessStack,
+    //     size, NULL, func);
+  
+    strcpy(newProcess->name,name);
+    newProcess->func = func;
+    procTable[pid % MAXPROC] = newProcess;   
+    // Add to pq
+    pq_add(newProcess->pid);
+    // Add as child
+    proc_add(currentProcess->proccess,newProcess);
+    currentProcess->proccess = newProcess;
+    // Add MMU space
+    mmu_init_proc(newProcess->pid);
+    func(arg);
+    currentProcess->proccess->status = RUNNING;
+
+
+
+    // Call dispatcher
+    dispatcher();
+
+
+
+    checkModeAfter(psr);
+    
+    return pid;
+}
+
+
+int   join(int *status){
+    // unsigned int psr =  checkModeBefore();
+    // Get lowest priority child
+    int childPid = proc_find(currentProcess->proccess);
+    printf("value %d\n",currentProcess->proccess->status);
+    if (childPid==-1) return -2; // If -1 then has no children
+       
+
+    if (status!=NULL){
+        *status = currentProcess->proccess->status;
+    } else {
+
+        status = (int *) malloc(sizeof(int));
+        *status = currentProcess->proccess->status;
+    }
+
+    // Blocks current process
+    currentProcess->proccess->status = BLOCKED;
+
+
+    
+
+    // checkModeAfter(psr);
+    return currentProcess->proccess->pid;
+}
+
+void  quit(int status){
+    unsigned int psr =  checkModeBefore();
+    checkModeAfter(psr);
+
+
+    currentProcess->proccess->status = status;
+    
+    // Must call
+    // mmu_quit(pid)
+    
+    return ;
+}
+
+int  zap(int pid){
+    unsigned int psr =  checkModeBefore();
+    checkModeAfter(psr);
+    
+    
+    return 0;
+}
+
+/* 
+    Tells wether it is zapped or not,
+    1 - it is
+    0 - it is not
+*/
+int   isZapped(void){
+    unsigned int psr =  checkModeBefore();
+    checkModeAfter(psr);
+
+    return currentProcess->proccess->isZapped;
+}
+
+/* 
+    Gets pid of current running process
+*/
+int   getpid(void){
+    unsigned int psr =  checkModeBefore();
+    checkModeAfter(psr);
+    
+    
+    return currentProcess->proccess->pid;
+}
+
+ 
+/* 
+    Prints out the entire proc table
+*/  
+void printProcess(PCBEntry* process){
+    if (process == NULL){
+            printf("NULL");
+        } else {
+            printf("Name:          |%s\n",process->name);
+            printf("PID:           |%d\n",process->pid);
+            // Parent pid
+            int parentPid = -1;
+            if (process->parent != NULL){
+                parentPid = process->parent->pid;
+            }
+            printf("Parent PID:    |%d\n",parentPid);
+            // Priority
+            printf("Priority:      |%d\n",process->priority);
+            printf("status:        |%d\n",process->status);
+            // # of children
+            int childrenNum = 0;
+            PCBEntry* curr = process->firstChild;
+            while (curr!=NULL){
+                curr = curr->nextChild;
+                childrenNum++;
+            }
+            printf("# of children: |%d\n",childrenNum);
+            // Time consumed
+            printf("Time consumed: |%d\n",process->timeRanFor);
+        }
+}
+
+void  dumpProcesses(void){
+    unsigned int psr =  checkModeBefore();
+    
+    
+    printf("---------------------------\n");
+    for (int i=0;MAXPROC>i;i++){
+        printf("---------------------------\n");
+        printProcess(procTable[i]);
+        printf("\n---------------------------");
+        
+    }
+    printf("\n");
+
+    checkModeAfter(psr);
+}
+
+/* 
+    Block the current process
+*/
+int   blockMe(int block_status){
+    unsigned int psr =  checkModeBefore();
+    
+    
+
+    if (block_status < 10){
+        printf("Block status must be above yes is %d\n",block_status);
+        USLOSS_Halt(1);
+    }
+    // Set to block
+    currentProcess->proccess->status = block_status;
+    // Call dispacther
+    dispatcher();
+
+    checkModeAfter(psr);
+    return 0;
+}
+
+/* 
+    UnBlocks a process 
+*/
+int   unblockProc(int pid){
+    unsigned int psr =  checkModeBefore();
+
+    int slot = pid % MAXPROC;
+    // Cant un block null
+    if (procTable[slot]==NULL){
+        return -2;
+    }
+    PCBEntry* proccess = procTable[slot];
+    // Cant un block youself
+    if (proccess->pid==pid){
+        return -2;
+    }
+    int status = proccess->status;
+    // Can't un block an unblocked process
+    if (status<BLOCKED){
+        return -2;
+    }
+
+    // Change status to ready
+    proccess->status = READY;
+    // Push to the end of the pq
+    pq_pushToEnd(proccess->pid);
+
+    // Call dispacther
+    dispatcher();
+
+    
+    checkModeAfter(psr);
+    return 0;
+}
+
+int   readCurStartTime(void){
+    unsigned int psr =  checkModeBefore();
+    int startTime = currentTime();
+    if (!currentProcess->proccess->timeSliceStart){
+        currentProcess->proccess->timeSliceStart = startTime;
+    }
+    checkModeAfter(psr);
+    return startTime;
+}
+
+void  timeSlice(void){
+    unsigned int psr =  checkModeBefore();
+    int totalTime = currentTime() - currentProcess->proccess->timeSliceStart;
+    if (totalTime > 80000){
+        // pq_pushToEnd(currentProcess->proccess->pid);
+        // dispatcher();
+        // call dispatcher() and reset the timeSliceStart but save timeRanFor;
+    }
+    checkModeAfter(psr);
+}
+
+int   readtime(void){
+    unsigned int psr =  checkModeBefore();
+    int totalTime = currentTime() - currentProcess->proccess->timeSliceStart + currentProcess->proccess->timeRanFor;
+    currentProcess->proccess->timeRanFor = totalTime;
+    checkModeAfter(psr);
+    return totalTime;
+}
+
+int   currentTime(void){
+    unsigned int psr =  checkModeBefore();
+    int retval;
+    int usloss_rc = USLOSS_DeviceInput(USLOSS_CLOCK_DEV, 0, &retval);
+    checkModeAfter(psr);
+    
+    return retval;
+}
+
+void  startProcesses(void){
+    
+   
+    // unsigned int psr =  checkModeBefore();
+    
+    // USLOSS_ContextSwitch(NULL,&currentProcess->proccess->context);
+    // /* 
+    //     Call the init process
+    // */
+    // checkModeAfter(psr);
+   
+    printf("here\n");
+    process_init_func();
+
+   
+        
+}
+
+
+
+
+
+
+
+
+
